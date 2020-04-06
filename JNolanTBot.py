@@ -13,32 +13,6 @@ def callback_cmd():
 	twist = Twist()
 	return twist
 
-"""
-def right():
-	global move_cmd
-	global cmd_vel
-	rospy.loginfo("right")  
-	# turn at 0.15 rad/s
-        move_cmd.angular.z = 0.15
-	move_cmd.linear.x = 0.0
-        cmd_vel.publish(move_cmd)
-        r.sleep()
-
-def forward():
-	global move_cmd
-	global cmd_vel
-	rospy.loginfo("forward")
-        move_cmd.linear.x = 1.5
-	move_cmd.angular.z = 0.0
-        cmd_vel.publish(move_cmd)
-        r.sleep()
-                  
-def stop():
-        rospy.loginfo("Stopped")
-	move_cmd.linear.x=0.0
-	move_cmd.angular.z = 0.0
-        cmd_vel.publish(move_cmd)
-"""     
 
 def main():
 	global twist
