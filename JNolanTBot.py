@@ -13,11 +13,11 @@ y=0.0
 
 yaw = 0.0
 goal = Point()
-goal.x = 5
-goal.y = 5
+goal.x = (0,0,2,3)
+goal.y = (0,1,2,-3)
 move = Twist()
-yawKp = 0.25
-forwardKp = 0.1
+yawKp = 4.5
+forwardKp = 1.5
 old_yaw = 0
 num_wraps = 0
 
@@ -52,21 +52,26 @@ rate = rospy.Rate(100)
 
 
 while not rospy.is_shutdown():
-  deltaX = goal.x - x
-  deltaY = goal.y - y
-  bearingToGoal = math.atan2(deltaX,deltaY) 
-  if goal.x == x and goal.y == y:
-    move.angular.z = 0.0
-    move.linear.x=0.0
-    print("GOAL!")
-    break
-  if abs(bearingToGoal - yaw) > 0.1:
-    move.angular.z= (bearingToGoal - yaw) * yawKp
-    move.linear.x = 0.02
-    print('turning to',bearingToGoal,'from',yaw)
-  else:
-    move.linear.x = ((math.hypot(goal.x-x,goal.y-y)) * forwardKp)
-    print(x,y)
-
-  pub.publish(move)
-  rate.sleep()
+  for i,gy in enumerate(goal.y):
+    for i,gx in enumerate(goal.x):
+      print('Goal is',goal.x[i],goal.y[i])
+      while True:
+        deltaX = goal.x[i] - x
+        deltaY = goal.y[i] - y
+        bearingToGoal = math.atan2(deltaY,deltaX) 
+        if x <= goal.x[i]+0.1 and x >= goal.x[i]-0.01:
+            if y <= goal.y[i]+0.1 and y >= goal.y[i]-0.01:
+              move.angular.z = 0.0
+              move.linear.x=0.0
+              print("GOAL!")
+              break
+        if abs(bearingToGoal - yaw) > 0.15:
+          move.angular.z= (bearingToGoal - yaw) * yawKp
+          move.linear.x = 0.00
+          #print('turning to',bearingToGoal,'from',yaw)
+        else:
+          move.angular.z=0.0
+          move.linear.x = 0.2#((math.hypot(goal.x-x,goal.y-y)) * forwardKp)
+          #print(x,y)
+        pub.publish(move)
+        rate.sleep()
