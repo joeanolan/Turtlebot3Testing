@@ -1,0 +1,223 @@
+#!/usr/bin/env python
+# -*- coding: utf-8 -*-
+#
+#
+import rospy
+import math
+import numpy as np
+from nav_msgs.msg import Odometry
+from tf.transformations import euler_from_quaternion
+from geometry_msgs.msg import Point, Twist
+from beginner_tutorials.msg import Position
+
+locX=0.0
+locY=0.0
+
+yaw = 0.0
+goal = Point()
+goal.x = (1)
+goal.y = (9)
+move = Twist()
+yawKp = 2.5
+forwardKp = 1.0
+old_yaw = 0
+num_wraps = 0
+
+sx = 0
+sy = 0    
+grid_size = .25  
+robot_radius = 1.0
+MinX = 0.0
+MinY = 0.0
+MaxX = 10.0
+MaxY = 10.0
+ox = [1,4,3,5,5,0,1,2,3]
+oy = [1,4,4,0,1,7,7,7,7]
+
+class Dijkstra:
+    def __init__(self, ox, oy, resolution, robot_radius):
+        self.resolution = resolution
+        self.robot_radius = robot_radius
+        self.map()
+        self.motion = self.get_motion_model() #borrowed this from online source
+
+    class Node:
+        def __init__(self, x, y, cost, parent):
+            self.x = x  
+            self.y = y  
+            self.cost = cost
+            self.parent = parent  
+
+    def planning(self, sx, sy, gx, gy):
+        start = self.Node(self.xyReferenceCalc(sx, self.min_x), self.xyReferenceCalc(sy, self.min_y), 0, -1)
+        goal = self.Node(self.xyReferenceCalc(gx, self.min_x), self.xyReferenceCalc(gy, self.min_y), 0, -1)
+
+        theNodesLessTraveled = dict()
+        nodesBoldlyGone = dict()
+        theNodesLessTraveled[self.NodeReferenceCalc(start)] = start
+        while True:
+            if len(theNodesLessTraveled) == 0:
+                print('All your nodes are belong to us')
+                break
+            try:
+                step = min(theNodesLessTraveled, key=lambda o: theNodesLessTraveled[o].cost)
+                current = theNodesLessTraveled[step]
+                
+            except KeyError:
+                step = min(theNodesLessTraveled, key=lambda o: theNodesLessTraveled[o].cost)
+                current = theNodesLessTraveled[step]
+                
+               
+            if current.x == goal.x and current.y == goal.y:
+                goal.parent = current.parent
+                goal.cost = current.cost
+                break
+            del theNodesLessTraveled[step]
+            nodesBoldlyGone[step] = current
+            
+            for move_x, move_y, move_cost in self.motion:
+                node = self.Node(current.x + move_x, current.y + move_y, current.cost + move_cost, step)
+                newStep = self.NodeReferenceCalc(node)
+                if newStep in nodesBoldlyGone:
+                    continue
+                if not self.verifyNode(node):
+                    continue
+                if newStep not in theNodesLessTraveled:
+                    theNodesLessTraveled[newStep] = node
+                else:
+                    if theNodesLessTraveled[newStep].cost >= node.cost:
+                        theNodesLessTraveled[newStep] = node
+        rx, ry = self.finalPath(goal, nodesBoldlyGone)
+        return rx, ry
+
+    def finalPath(self, goalNode, final_set):
+        rx, ry = [self.axisPosition(goalNode.x, self.min_x)], [self.axisPosition(goalNode.y, self.min_y)]
+        parent = goalNode.parent
+        while parent != -1:
+            n = final_set[parent]
+            rx.insert(0,self.axisPosition(n.x, self.min_x))
+            ry.insert(0,self.axisPosition(n.y, self.min_y))
+            parent = n.parent
+        return rx, ry
+
+    def axisPosition(self, index, axisMin):
+        pos = index * self.resolution + axisMin
+        return pos
+
+    def xyReferenceCalc(self, position, axisMin):
+        return (position - axisMin) // self.resolution
+
+    def NodeReferenceCalc(self, node):
+        return (node.y - self.min_y) * self.x_range + (node.x - self.min_x)
+
+    def verifyNode(self, node):
+        global ox, oy
+        px = self.axisPosition(node.x, self.min_x)
+        py = self.axisPosition(node.y, self.min_y)
+        if px < self.min_x:
+            return False
+        if py < self.min_y:
+            return False
+        if px >= self.max_x:
+            return False
+        if py >= self.max_y:
+            return False
+        for i,x in enumerate(ox):
+            for i,y in enumerate(oy):
+                if ox[i] == px and oy[i] == py:
+                    #print('obs avoid @',px,py)
+                    return False
+                if math.hypot(ox[i] - px,oy[i]-py) < self.robot_radius:
+                    return False
+        return True
+
+    def map(self):
+        global MinX,MinY,MaxX,MaxY
+        self.min_x = MinX
+        self.min_y = MinY
+        self.max_x = MaxX
+        self.max_y = MaxY
+        self.x_range = (self.max_x - self.min_x) / self.resolution
+        self.y_range = (self.max_y - self.min_y) / self.resolution
+
+    @staticmethod
+    def get_motion_model(): #i borrowed this from online source 
+        # dx, dy, cost
+        motion = [[1, 0, 1],
+                  [0, 1, 1],
+                  [-1, 0, 1],
+                  [0, -1, 1],
+                  [-1, -1, math.sqrt(2)],
+                  [-1, 1, math.sqrt(2)],
+                  [1, -1, math.sqrt(2)],
+                  [1, 1, math.sqrt(2)]]
+        return motion
+
+    
+   
+def odom(data,pub):
+  global locX
+  global locY
+  global old_yaw,num_wraps,yaw
+  threshold = 15*math.pi/180
+  pos_msg = Position()
+  locX = data.pose.pose.position.x
+  locY = data.pose.pose.position.y
+  rot_quat = data.pose.pose.orientation
+  (roll,pitch,yaw) = euler_from_quaternion ([rot_quat.x,rot_quat.y,rot_quat.z,rot_quat.w])
+  if old_yaw < -threshold and yaw > threshold: # from -pi to pi (increasing negative)
+    num_wraps = num_wraps - 1
+  elif old_yaw > threshold and yaw < -threshold:
+    num_wraps = num_wraps + 1
+  wrapped_yaw = yaw + 2*math.pi*num_wraps
+  old_yaw = yaw
+  pos_msg.angular.roll  = roll * 180/math.pi
+  pos_msg.angular.pitch = pitch * 180/math.pi
+  pos_msg.angular.yaw   = wrapped_yaw * 180/math.pi
+  pub1.publish(pos_msg)
+
+rospy.init_node("Controller")
+pub= rospy.Publisher('/cmd_vel',Twist,queue_size = 10)
+pub1 = rospy.Publisher('/eul', Position, queue_size=10)
+sub = rospy.Subscriber('/odom',Odometry,odom,(pub1))
+rate = rospy.Rate(100)
+
+
+while not rospy.is_shutdown():
+  #for i,gy in enumerate(goal.y):
+    #for i,gx in enumerate(goal.x):
+        dijkstra = Dijkstra(ox, oy, grid_size, robot_radius)
+        routex, routey = dijkstra.planning(locX, locY, goal.x, goal.y)
+      #print(routex,routey)
+      #print('Goal is',goal.x,goal.y)
+      #while True:
+        for i,Ry in enumerate(routey):
+          for i,Rx in enumerate(routex):
+            print(routex[i],routey[i])
+            while True:
+              deltaX = routex[i] - locX
+              deltaY = routey[i] - locY
+              bearingToGoal = math.atan2(deltaY,deltaX)
+              #print(locX, locY)
+              if locX <= goal.x+0.1 and locX >= goal.x-0.01:
+                if locY <= goal.y+0.1 and locY >= goal.y-0.01:
+                  move.angular.z = 0.0
+                  move.linear.x=0.0
+                  print("GOAL!")
+                  break
+              if locX <= routex[i]+0.1 and locX >= routex[i]-0.01:
+                if locY <= routey[i]+0.1 and locY >= routey[i]-0.01:
+                  move.angular.z = 0.0
+                  move.linear.x=0.0
+                  print("Step #",i,'complete')
+                  break
+              if abs(bearingToGoal - yaw) > 0.2:
+                move.angular.z= (bearingToGoal - yaw) * yawKp
+                move.linear.x = 0.00
+                #print('turning to',bearingToGoal,'from',yaw)
+              else:
+                move.angular.z=0.0
+                move.linear.x = 0.2#((math.hypot(goal.x-x,goal.y-y)) * forwardKp)
+                #print(locX,locY)
+              pub.publish(move)
+              rate.sleep()
