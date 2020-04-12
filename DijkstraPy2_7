@@ -1,0 +1,160 @@
+# -*- coding: utf-8 -*-
+"""
+Created on Thu February 08 11:07:39 2020
+
+@author: NolanJosephA(UMKC-St
+"""
+
+import matplotlib.pyplot as plt
+import math
+import numpy as np
+
+sx = 0
+sy = 0  
+gx = 9
+gy = 8  
+grid_size = .5  
+robot_radius = 1
+MinX = 0.0
+MinY = 0.0
+MaxX = 10.0
+MaxY = 10.0
+ox = [1,4,3,5,5,0,1,2,3,3.5,3]
+oy = [1,4,4,0,1,7,7,7,7,4,5]
+
+class Dijkstra:
+    def __init__(self, ox, oy, resolution, robot_radius):
+        self.resolution = resolution
+        self.robot_radius = robot_radius
+        self.map()
+        self.motion = self.get_motion_model() #borrowed this from online source
+
+    class Node:
+        def __init__(self, x, y, cost, parent):
+            self.x = x  
+            self.y = y  
+            self.cost = cost
+            self.parent = parent  
+
+    def planning(self, sx, sy, gx, gy):
+        start = self.Node(self.xyReferenceCalc(sx, self.min_x), self.xyReferenceCalc(sy, self.min_y), 0, -1)
+        goal = self.Node(self.xyReferenceCalc(gx, self.min_x), self.xyReferenceCalc(gy, self.min_y), 0, -1)
+
+        theNodesLessTraveled = dict()
+        nodesBoldlyGone = dict()
+        theNodesLessTraveled[self.NodeReferenceCalc(start)] = start
+        while True:
+            if len(theNodesLessTraveled) == 0:
+                print('All your nodes are belong to us')
+                break
+            try:
+                step = min(theNodesLessTraveled, key=lambda o: theNodesLessTraveled[o].cost)
+                current = theNodesLessTraveled[step]
+                
+            except KeyError:
+                step = min(theNodesLessTraveled, key=lambda o: theNodesLessTraveled[o].cost)
+                current = theNodesLessTraveled[step]
+                
+            plt.plot(self.axisPosition(current.x, self.min_x), self.axisPosition(current.y, self.min_y), "xc")
+               
+            if current.x == goal.x and current.y == goal.y:
+                goal.parent = current.parent
+                goal.cost = current.cost
+                break
+            del theNodesLessTraveled[step]
+            nodesBoldlyGone[step] = current
+            
+            for move_x, move_y, move_cost in self.motion:
+                node = self.Node(current.x + move_x, current.y + move_y, current.cost + move_cost, step)
+                newStep = self.NodeReferenceCalc(node)
+                if newStep in nodesBoldlyGone:
+                    continue
+                if not self.verifyNode(node):
+                    continue
+                if newStep not in theNodesLessTraveled:
+                    theNodesLessTraveled[newStep] = node
+                else:
+                    if theNodesLessTraveled[newStep].cost >= node.cost:
+                        theNodesLessTraveled[newStep] = node
+        rx, ry = self.finalPath(goal, nodesBoldlyGone)
+        return rx, ry
+
+    def finalPath(self, goalNode, final_set):
+        rx, ry = [self.axisPosition(goalNode.x, self.min_x)], [self.axisPosition(goalNode.y, self.min_y)]
+        parent = goalNode.parent
+        while parent != -1:
+            n = final_set[parent]
+            rx.append(self.axisPosition(n.x, self.min_x))
+            ry.append(self.axisPosition(n.y, self.min_y))
+            parent = n.parent
+        return rx, ry
+
+    def axisPosition(self, index, axisMin):
+        pos = index * self.resolution + axisMin
+        return pos
+
+    def xyReferenceCalc(self, position, axisMin):
+        return (position - axisMin) // self.resolution
+
+    def NodeReferenceCalc(self, node):
+        return (node.y - self.min_y) * self.x_range + (node.x - self.min_x)
+
+    def verifyNode(self, node):
+        global ox, oy
+        px = self.axisPosition(node.x, self.min_x)
+        py = self.axisPosition(node.y, self.min_y)
+        if px < self.min_x:
+            return False
+        if py < self.min_y:
+            return False
+        if px >= self.max_x:
+            return False
+        if py >= self.max_y:
+            return False
+        for i,x in enumerate(ox):
+            for i,y in enumerate(oy):
+                if ox[i] == px and oy[i] == py:
+                    #print('obs avoid @',px,py)
+                    return False
+                if math.hypot(ox[i] - px,oy[i]-py) < self.robot_radius:
+                    return False
+        return True
+
+    def map(self):
+        global MinX,MinY,MaxX,MaxY
+        self.min_x = MinX
+        self.min_y = MinY
+        self.max_x = MaxX
+        self.max_y = MaxY
+        self.x_range = (self.max_x - self.min_x) / self.resolution
+        self.y_range = (self.max_y - self.min_y) / self.resolution
+
+    @staticmethod
+    def get_motion_model(): #i borrowed this from online source 
+        # dx, dy, cost
+        motion = [[1, 0, 1],
+                  [0, 1, 1],
+                  [-1, 0, 1],
+                  [0, -1, 1],
+                  [-1, -1, math.sqrt(2)],
+                  [-1, 1, math.sqrt(2)],
+                  [1, -1, math.sqrt(2)],
+                  [1, 1, math.sqrt(2)]]
+        return motion
+
+def main():
+    plt.xticks(np.arange(MinX,MaxX+grid_size))
+    plt.yticks(np.arange(MinY,MaxY+grid_size))
+    plt.plot(ox, oy, ".k",markersize=10)
+    plt.plot(sx, sy, "ob")
+    plt.plot(gx, gy, "xr",markersize=10)
+    plt.grid(True)
+    dijkstra = Dijkstra(ox, oy, grid_size, robot_radius)
+    routex, routey = dijkstra.planning(sx, sy, gx, gy)
+    plt.plot(routex, routey, "-r")
+    plt.show()
+    print('routex=',routex)
+    print('routey=',routey)
+
+if __name__ == '__main__':
+    main()
