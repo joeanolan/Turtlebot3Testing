@@ -1,6 +1,7 @@
 #!/usr/bin/env python
 # -*- coding: utf-8 -*-
 #
+#Flip aStar variable to False on line 37 for Dijkstra's. 
 #
 import rospy
 import math
