@@ -1,0 +1,230 @@
+# -*- coding: utf-8 -*-
+"""
+Spyder Editor
+
+This is a temporary script file.
+"""
+
+import matplotlib.pyplot as plt
+import math, time
+import numpy as np
+from collections import deque
+from itertools import permutations as prm
+#startTime = time.time()
+
+#ox = [1,4,3,5,5,0,1,2,3]
+#oy = [1,4,4,0,1,7,7,7,7]
+ 
+ox = [2, 2, 2, 2, 0, 1, 2, 3, 4, 5, 5, 5, 5,5, 8, 9, 10, 11, 12, 13, 8, 8, 8, 8, 8, 8, 8, 2, 3, 4, 5, 6, 7, 9, 10, 11, 12, 13, 14, 15, 2, 2, 2, 2, 2, 2, 5, 5, 5, 5, 5, 5, 5, 6, 7, 8, 9, 10, 11, 12, 12, 12, 12, 12]
+oy = [2, 3, 4, 5, 5, 5, 5, 5, 5, 5, 2, 3, 4, 5, 2, 2, 2, 2, 2, 2, 3, 4, 5, 6, 7, 8, 9, 7,7, 7, 7, 7, 7, 6, 6, 6, 6, 6, 6, 6, 8, 9, 10, 11, 12, 13, 9, 10, 11, 12, 13, 14, 15, 12, 12, 12, 12, 12, 12, 8, 9, 10, 11, 12]
+aStar = True
+ 
+class Dijkstra:
+    def __init__(self, ox, oy, resolution, robot_radius):
+        self.resolution = resolution
+        self.robot_radius = robot_radius
+        self.map()
+        self.motion = self.get_motion_model() #borrowed this from online source
+ 
+    class Node:
+        def __init__(self, x, y, cost, parent):
+            self.x = x 
+            self.y = y 
+            self.cost = cost
+            self.parent = parent 
+ 
+    def planning(self, sx, sy, gx, gy):
+        start = self.Node(self.xyReferenceCalc(sx, self.min_x), self.xyReferenceCalc(sy, self.min_y), 0, -1)
+        goal = self.Node(self.xyReferenceCalc(gx, self.min_x), self.xyReferenceCalc(gy, self.min_y), 0, -1)
+ 
+        theNodesLessTraveled = dict()
+        nodesBoldlyGone = dict()
+        theNodesLessTraveled[self.NodeReferenceCalc(start)] = start
+        while True:
+            if len(theNodesLessTraveled) == 0:
+                print('All your nodes are belong to us')
+                break
+            try:
+                step = min(theNodesLessTraveled, key=lambda o: theNodesLessTraveled[o].cost + (self.calc_heuristic(goal,theNodesLessTraveled[o]) if aStar == True else 0))
+                current = theNodesLessTraveled[step]
+               
+            except KeyError:
+                step = min(theNodesLessTraveled, key=lambda o: theNodesLessTraveled[o].cost  + (self.calc_heuristic(goal,theNodesLessTraveled[o]) if aStar == True else 0))
+                current = theNodesLessTraveled[step]
+               
+            #plt.plot(self.axisPosition(current.x, self.min_x), self.axisPosition(current.y, self.min_y), "xc")
+              
+            if current.x == goal.x and current.y == goal.y:
+                goal.parent = current.parent
+                goal.cost = current.cost
+                break
+            del theNodesLessTraveled[step]
+            nodesBoldlyGone[step] = current
+            #plt.gcf().canvas.mpl_connect('key_release_event',
+            #                                 lambda event: [exit(
+            #                                     0) if event.key == 'escape' else None])
+            #if len(nodesBoldlyGone.keys()) % 10 == 0:
+                #plt.pause(0.001)
+                   
+            for move_x, move_y, move_cost in self.motion:
+                node = self.Node(current.x + move_x, current.y + move_y, current.cost + move_cost, step)
+                newStep = self.NodeReferenceCalc(node)
+                if newStep in nodesBoldlyGone:
+                    continue
+                if not self.verifyNode(node):
+                    continue
+                if newStep not in theNodesLessTraveled:
+                    theNodesLessTraveled[newStep] = node
+                else:
+                    if theNodesLessTraveled[newStep].cost >= node.cost:
+                        theNodesLessTraveled[newStep] = node
+        rx, ry = self.finalPath(goal, nodesBoldlyGone)
+        return rx, ry
+ 
+    def finalPath(self, goalNode, final_set):
+        rx, ry = [self.axisPosition(goalNode.x, self.min_x)], [self.axisPosition(goalNode.y, self.min_y)]
+        parent = goalNode.parent
+        while parent != -1:
+            n = final_set[parent]
+            rx.append(self.axisPosition(n.x, self.min_x))
+            ry.append(self.axisPosition(n.y, self.min_y))
+            parent = n.parent
+        return rx, ry
+ 
+    def axisPosition(self, index, axisMin):
+        pos = index * self.resolution + axisMin
+        return pos
+ 
+    def xyReferenceCalc(self, position, axisMin):
+        return (position - axisMin) // self.resolution
+ 
+    def NodeReferenceCalc(self, node):
+        return (node.y - self.min_y) * self.x_range + (node.x - self.min_x)
+ 
+    def verifyNode(self, node):
+        global ox, oy
+        px = self.axisPosition(node.x, self.min_x)
+        py = self.axisPosition(node.y, self.min_y)
+        if px < self.min_x:
+            return False
+        if py < self.min_y:
+            return False
+        if px >= self.max_x:
+            return False
+        if py >= self.max_y:
+            return False
+        for i,x in enumerate(ox):
+            for i,y in enumerate(oy):
+                if ox[i] == px and oy[i] == py:
+                    #print('obs avoid @',px,py)
+                    return False
+                if math.hypot(ox[i] - px,oy[i]-py) < self.robot_radius:
+                    return False
+        return True
+ 
+    def map(self):
+        global MinX,MinY,MaxX,MaxY
+        self.min_x = MinX
+        self.min_y = MinY
+        self.max_x = MaxX
+        self.max_y = MaxY
+        self.x_range = (self.max_x - self.min_x) / self.resolution
+        self.y_range = (self.max_y - self.min_y) / self.resolution
+ 
+    @staticmethod
+    def get_motion_model(): #i borrowed this from online source
+        # dx, dy, cost
+        motion = [[1, 0, 1],
+                  [0, 1, 1],
+                  [-1, 0, 1],
+                  [0, -1, 1],
+                  [-1, -1, math.sqrt(2)],
+                  [-1, 1, math.sqrt(2)],
+                  [1, -1, math.sqrt(2)],
+                  [1, 1, math.sqrt(2)]]
+        return motion
+ 
+    @staticmethod
+    def calc_heuristic(n1, n2):
+        w = 1.0  # weight of heuristic
+        d = w * math.hypot(n1.x - n2.x, n1.y - n2.y)
+        return d
+ 
+def main():
+    sx = 0
+    sy = 0 
+    #gx = 7
+    #gy = 13 
+    grid_size = .5 
+    robot_radius = 1
+    MinX = 0.0
+    MinY = 0.0
+    MaxX = 15.0
+    MaxY = 15.0
+    best_length = None
+    goals = [(9,4), (4,4), (1,9)]
+    prm_goals = prm(goals, len(goals))
+    #start = [(0,0)]
+    dijkstra = Dijkstra(ox, oy, grid_size, robot_radius)
+    for i in list(prm_goals):
+        length = 0.0
+        w = 0
+        fullRx, fullRy = [],[]
+        last = []
+        #fullRx = deque(fullRx)
+        #fullRy = deque(fullRy)
+        #print i
+        while w < len(i):
+            #print w
+            if w == 0:
+                routex, routey = dijkstra.planning(sx, sy, i[w][0], i[w][1])
+                #print('w=0')
+                for r,x in enumerate(routex):
+                    fullRx.insert(0,routex[r])
+                    fullRy.insert(0,routey[r])
+                    if r >= 1:
+                        length += math.hypot(routex[r]-routex[r-1],routey[r]-routey[r-1])
+            else:
+                #print('w=',w)
+                routex, routey = dijkstra.planning(last[0], last[1], i[w][0], i[w][1])
+                for r,x in enumerate(routex):
+                    tempRx, tempRy = [], []
+                    tempRx.insert(0,routex[r])
+                    tempRy.insert(0,routey[r])
+                    if r >= 1:
+                        length += math.hypot(routex[r]-routex[r-1],routey[r]-routey[r-1])
+                fullRx+=tempRx
+                fullRy+=tempRy
+                
+            last = [i[w][0],i[w][1]]
+            w+=1
+            print(fullRx)
+        best_length = length if (length < best_length or best_length == None) else best_length
+        if best_length == length:
+            #print(best_length)
+            #best_route = i
+            best_fullRx = fullRx
+            best_fullRy = fullRy
+            #print(best_fullRx)
+            #print(best_fullRy)
+
+    
+    plt.plot(best_fullRx,best_fullRy,'-r')
+    plt.xticks(np.arange(MinX,MaxX+grid_size))
+    plt.yticks(np.arange(MinY,MaxY+grid_size))
+    plt.plot(ox, oy, ".k",markersize=10)
+    plt.plot(sx, sy, "ob")
+    #plt.plot(gx, gy, "xr",markersize=10)
+    plt.grid(True)
+    
+    #plt.plot(routex, routey, "-r")
+    plt.show()
+    #print('routex=',routex)
+    #print('routey=',routey)
+
+if __name__ == '__main__':
+    main()
+    #print(time.time()-startTime)
+
+ 
+
