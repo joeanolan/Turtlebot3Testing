@@ -1,31 +1,33 @@
-"""
 Created on Tue May 12 12:08:29 2020
 
 @author: joe
 """
 
 from itertools import permutations as prm
-import math
+import math, matplotlib.pyplot as plt
 
 best_length = None
 goals = [(9,4), (4,4), (1,9), (9,7), (6,14)]
 prm_goals = prm(goals, len(goals))
 start = [(0,0)]
 for i in list(prm_goals):
-    #print(len(i))
     length = 0.0
     w = 0
     while w < len(i):
         if w == 0:
-            #print(w)
             length = math.hypot(i[w][0] - start[0][0], i[w][1] - start[0][1])
         else:
             length+= math.hypot(i[w][0] - last[0], i[w][1] - last[1])
         last = [i[w][0],i[w][1]]
-        #print(length)
         w+=1
     best_length = length if (length < best_length or best_length == None) else best_length
     print(best_length)
     if best_length == length:
         best_route = i
-        print(best_route)
+
+plotx, ploty = [start[0][0]], [start[0][1]]
+for i,p in enumerate(best_route):
+    plotx.append(best_route[i][0])
+    ploty.append(best_route[i][1])
+    
+plt.plot(plotx,ploty,'-r')
